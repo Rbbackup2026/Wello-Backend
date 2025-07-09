@@ -87,7 +87,6 @@ router.put('/put/:id', upload.single('image'), async (req, res) => {
 });
 
 
-// ✅ DELETE: Delete banner and image
 router.delete('/delete/:id', async (req, res) => {
   try {
     const banner = await Banner.findById(req.params.id);
