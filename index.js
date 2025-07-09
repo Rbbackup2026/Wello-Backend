@@ -8,7 +8,7 @@ const morgan = require("morgan");
 const cookieParser = require("cookie-parser");
 
 const app = express();
-const port = 3000;
+// const port = 3000;
 
 // Middlewares
 app.use(morgan("dev"));
@@ -60,10 +60,9 @@ app.use("/v1/api",  HomeBannerRoute);
 
 
 
-
-// Start server
-app.listen(port, () => {
-  console.log(`Server working on ${port}`);
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
 
 
