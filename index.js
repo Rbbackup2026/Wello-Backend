@@ -27,6 +27,10 @@ mongoose
   .then(() => console.log("✅ Connected to MongoDB"))
   .catch((err) => console.error("❌ MongoDB connection error:", err));
 
+  app.get('/', (req, res) => {
+  res.send('🟢 MDRC Backend API is running!');
+});
+
 // ✅ Add body parsers ONLY for routes that need JSON (e.g. register/login)
 const registerRoute = require("./Route/RegisterRoute");
 app.use("/v1/api", express.json(), express.urlencoded({ extended: true }), registerRoute);
