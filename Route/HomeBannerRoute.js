@@ -36,7 +36,7 @@ router.post('/uploadhomebanner', upload.single('image'), async (req, res) => {
 
 
 // ✅ GET: All banners
-router.get('getall/', async (req, res) => {
+router.get('/getall', async (req, res) => {
   try {
     const banners = await Banner.find().sort({ createdAt: -1 });
     res.status(200).json(banners);
@@ -46,7 +46,7 @@ router.get('getall/', async (req, res) => {
 });
 
 // ✅ GET: Single banner by ID
-router.get('getone/:id', async (req, res) => {
+router.get('/getone/:id', async (req, res) => {
   try {
     const banner = await Banner.findById(req.params.id);
     if (!banner) return res.status(404).json({ error: 'Banner not found' });
@@ -59,7 +59,7 @@ router.get('getone/:id', async (req, res) => {
 
 
 // ✅ PUT: Update banner (optionally update image)
-router.put('put/:id', upload.single('image'), async (req, res) => {
+router.put('/put/:id', upload.single('image'), async (req, res) => {
   try {
     const banner = await Banner.findById(req.params.id);
     if (!banner) return res.status(404).json({ error: 'Banner not found' });
@@ -81,7 +81,7 @@ router.put('put/:id', upload.single('image'), async (req, res) => {
 
 
 // ✅ DELETE: Delete banner and image file
-router.delete('delete/:id', async (req, res) => {
+router.delete('/delete/:id', async (req, res) => {
   try {
     const banner = await Banner.findById(req.params.id);
     if (!banner) return res.status(404).json({ error: 'Banner not found' });
