@@ -13,8 +13,9 @@ const storage = multer.diskStorage({
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     cb(null, uniqueSuffix + path.extname(file.originalname));
-  }
+  },
 });
+
 const upload = multer({ storage });
 
 
@@ -24,7 +25,8 @@ router.post('/uploadhomebanner', upload.single('image'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Image file is required' });
 
     const banner = new Banner({
-      image: `/uploads/Homebanners/${req.file.filename}`
+      image: `/uploads/Homebanners/${req.file.filename}`,
+      isActive: req.body.isActive ?? true, // optionally take isActive from body
     });
 
     await banner.save();
@@ -35,15 +37,16 @@ router.post('/uploadhomebanner', upload.single('image'), async (req, res) => {
 });
 
 
-// ✅ GET: All banners
+// ✅ GET: Only active banners
 router.get('/getall', async (req, res) => {
   try {
-    const banners = await Banner.find().sort({ createdAt: -1 });
+    const banners = await Banner.find({ isActive: true }).sort({ createdAt: -1 });
     res.status(200).json(banners);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch banners' });
   }
 });
+
 
 // ✅ GET: Single banner by ID
 router.get('/getone/:id', async (req, res) => {
@@ -58,18 +61,22 @@ router.get('/getone/:id', async (req, res) => {
 });
 
 
-// ✅ PUT: Update banner (optionally update image)
+// ✅ PUT: Update banner image and isActive
 router.put('/put/:id', upload.single('image'), async (req, res) => {
   try {
     const banner = await Banner.findById(req.params.id);
     if (!banner) return res.status(404).json({ error: 'Banner not found' });
 
-    // If a new image is uploaded, delete old one
+    // Replace image if uploaded
     if (req.file) {
       const oldImagePath = path.join(__dirname, '..', banner.image);
       if (fs.existsSync(oldImagePath)) fs.unlinkSync(oldImagePath);
-
       banner.image = `/uploads/Homebanners/${req.file.filename}`;
+    }
+
+    // Update isActive if provided
+    if (req.body.isActive !== undefined) {
+      banner.isActive = req.body.isActive === 'true' || req.body.isActive === true;
     }
 
     await banner.save();
@@ -80,13 +87,12 @@ router.put('/put/:id', upload.single('image'), async (req, res) => {
 });
 
 
-// ✅ DELETE: Delete banner and image file
+// ✅ DELETE: Delete banner and image
 router.delete('/delete/:id', async (req, res) => {
   try {
     const banner = await Banner.findById(req.params.id);
     if (!banner) return res.status(404).json({ error: 'Banner not found' });
 
-    // Delete image file
     const imagePath = path.join(__dirname, '..', banner.image);
     if (fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
 
