@@ -1,127 +1,398 @@
 const express = require('express');
+const router = express.Router();
+const Product = require('../Models/ListingItems');
 const multer = require('multer');
 const path = require('path');
-const Product = require('../Models/ListingItems');
-const router = express.Router();
+const fs = require('fs');
 
-// Configure Multer
+// ✅ FIXED: Multer configuration with proper setup
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, 'uploads/');
+    const uploadDir = path.join(__dirname, '..', 'uploads');
+    // Create directory if it doesn't exist
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
   },
   filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
+    const ext = path.extname(file.originalname);
+    const uniqueName = `product-${Date.now()}-${Math.round(Math.random() * 1E9)}${ext}`;
+    cb(null, uniqueName);
   }
 });
-const upload = multer({ storage: storage });
 
-// POST /product_upload
-router.post('/product_upload', upload.array('images', 7), async (req, res) => {
+const upload = multer({ 
+  storage: storage,
+  fileFilter: function (req, file, cb) {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed!'), false);
+    }
+  },
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  }
+});
+
+// ✅ FIXED: POST product with better error handling
+router.post('/post_product', upload.single('iconImg'), async (req, res) => {
   try {
-    const imageUrls = req.files.map(file => ({
-      url: `${req.protocol}://${req.get('host')}/uploads/${file.filename}`
-    }));
+    const productData = { ...req.body };
+    
+    console.log('Received data:', productData);
+    console.log('File received:', req.file);
 
-    const {
-      name, description, category,
-      price, discountPrice, stockQuantity,
-      sku, brand, ratingsAverage, ratingsCount, isActive
-    } = req.body;
+    // ✅ Handle array fields safely
+    if (productData.keyFeatures) {
+      try {
+        productData.keyFeatures = typeof productData.keyFeatures === 'string' 
+          ? JSON.parse(productData.keyFeatures) 
+          : productData.keyFeatures;
+      } catch (e) {
+        console.error('Error parsing keyFeatures:', e);
+        productData.keyFeatures = [];
+      }
+    }
 
-    const newProduct = new Product({
-      name,
-      description,
-      category,
-      price,
-      discountPrice,
-      stockQuantity,
-      sku,
-      brand,
-      ratingsAverage,
-      ratingsCount,
-      isActive,
-      images: imageUrls
+    if (productData.department) {
+      try {
+        productData.department = typeof productData.department === 'string'
+          ? JSON.parse(productData.department)
+          : productData.department;
+      } catch (e) {
+        console.error('Error parsing department:', e);
+        productData.department = [];
+      }
+    }
+
+    // ✅ Handle numeric conversions safely
+    const numericFields = ['price', 'mrp', 'schedulePrice', 'testCount', 'fromAge', 'toAge'];
+    numericFields.forEach(field => {
+      if (productData[field]) {
+        productData[field] = Number(productData[field]);
+        if (isNaN(productData[field])) {
+          productData[field] = 0;
+        }
+      }
     });
 
-    const savedProduct = await newProduct.save();
-    res.status(201).json(savedProduct);
-
-  } catch (error) {
-    console.error('Error saving product:', error);
-    res.status(400).json({ message: error.message });
-  }
-});
-
-
-router.get("/get_product", async (req, res) => {
-  try {
-    const items = await Product.find();
-    res.json(items);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-router.get('/product/:id', async (req, res) => {
-  const product = await Product.findById(req.params.id);
-  if (!product) return res.status(404).send({ error: "Product not found" });
-  res.send(product);
-});
-
-
-
-// You're returning a SINGLE product if it exists and isActive
-router.get('/getproduct_id/:id', async (req, res) => {
-  try {
-    const product = await Product.findOne({ _id: req.params.id, isActive: true });
-    if (!product) return res.status(404).json({ message: 'Product not found or inactive.' });
-    res.json(product);
-  } catch (error) {
-    res.status(500).json({ message: 'Server error.' });
-  }
-});
-
-/**
- * PUT /items/:id - Update product
- */
-router.put("/put_product/:id", async (req, res) => {
-  try {
-    const updated = await Product.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
+    // ✅ Handle boolean fields
+    const booleanFields = ['showInHome', 'showHomeBanner', 'status', 'isActive'];
+    booleanFields.forEach(field => {
+      if (productData[field] !== undefined) {
+        productData[field] = productData[field] === 'true' || productData[field] === true;
+      }
     });
-    if (!updated) return res.status(404).json({ message: "Item not found" });
-    res.json(updated);
+
+    // ✅ Handle image
+    if (req.file) {
+      productData.images = [{
+        url: `/uploads/${req.file.filename}`
+      }];
+    } else {
+      productData.images = [];
+    }
+
+    // ✅ Set default values for required fields
+    if (!productData.metaTitle) productData.metaTitle = productData.name;
+    if (!productData.metaKeywords) productData.metaKeywords = productData.name;
+    if (!productData.metaDescription) productData.metaDescription = productData.name;
+
+    const product = new Product(productData);
+    await product.save();
+
+    // ✅ Populate references
+    const populatedProduct = await Product.findById(product._id)
+      .populate('category')
+      .populate('department')
+      .populate('keyFeatures')
+      .populate('diseases');
+
+    res.status(201).json({
+      success: true,
+      message: 'Product created successfully',
+      data: populatedProduct
+    });
+
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    console.error('Error creating product:', error);
+    
+    // ✅ Delete uploaded file if there was an error
+    if (req.file) {
+      fs.unlink(req.file.path, (err) => {
+        if (err) console.error('Error deleting uploaded file:', err);
+      });
+    }
+
+    res.status(400).json({
+      success: false,
+      message: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
-/**
- * PUT /items/:id/toggle-status - Toggle isActive
- */
-router.put("/put_status/:id/toggle-status", async (req, res) => {
+// ✅ FIXED: UPDATE product route
+router.put('/put_product/:id', upload.single('iconImg'), async (req, res) => {
   try {
-    const item = await Product.findById(req.params.id);
-    if (!item) return res.status(404).json({ message: "Item not found" });
+    const { id } = req.params;
+    const productData = { ...req.body };
 
-    item.isActive = !item.isActive;
-    await item.save();
-    res.json({ message: "Status toggled", isActive: item.isActive });
+    // ✅ Check if product exists
+    const existingProduct = await Product.findById(id);
+    if (!existingProduct) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Product not found' 
+      });
+    }
+
+    // ✅ Handle array fields safely
+    if (productData.keyFeatures) {
+      try {
+        productData.keyFeatures = typeof productData.keyFeatures === 'string' 
+          ? JSON.parse(productData.keyFeatures) 
+          : productData.keyFeatures;
+      } catch (e) {
+        console.error('Error parsing keyFeatures:', e);
+        productData.keyFeatures = existingProduct.keyFeatures;
+      }
+    }
+
+    if (productData.department) {
+      try {
+        productData.department = typeof productData.department === 'string'
+          ? JSON.parse(productData.department)
+          : productData.department;
+      } catch (e) {
+        console.error('Error parsing department:', e);
+        productData.department = existingProduct.department;
+      }
+    }
+
+    // ✅ Handle numeric conversions safely
+    const numericFields = ['price', 'mrp', 'schedulePrice', 'testCount', 'fromAge', 'toAge'];
+    numericFields.forEach(field => {
+      if (productData[field]) {
+        productData[field] = Number(productData[field]);
+        if (isNaN(productData[field])) {
+          productData[field] = existingProduct[field] || 0;
+        }
+      }
+    });
+
+    // ✅ Handle boolean fields
+    const booleanFields = ['showInHome', 'showHomeBanner', 'status', 'isActive'];
+    booleanFields.forEach(field => {
+      if (productData[field] !== undefined) {
+        productData[field] = productData[field] === 'true' || productData[field] === true;
+      }
+    });
+
+    // ✅ Handle image update
+    if (req.file) {
+      // Delete old images if they exist
+      if (existingProduct.images && existingProduct.images.length > 0) {
+        existingProduct.images.forEach(image => {
+          const oldImagePath = path.join(__dirname, '..', image.url);
+          if (fs.existsSync(oldImagePath)) {
+            fs.unlink(oldImagePath, (err) => {
+              if (err) console.error('Error deleting old image:', err);
+            });
+          }
+        });
+      }
+      
+      productData.images = [{
+        url: `/uploads/${req.file.filename}`
+      }];
+    }
+
+    const updatedProduct = await Product.findByIdAndUpdate(
+      id,
+      productData,
+      { new: true, runValidators: true }
+    ).populate(['category', 'department', 'keyFeatures', 'diseases']);
+
+    res.json({
+      success: true,
+      message: 'Product updated successfully',
+      data: updatedProduct
+    });
+
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Error updating product:', error);
+    
+    // ✅ Delete uploaded file if there was an error
+    if (req.file) {
+      fs.unlink(req.file.path, (err) => {
+        if (err) console.error('Error deleting uploaded file:', err);
+      });
+    }
+
+    res.status(400).json({
+      success: false,
+      message: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
-/**
- * DELETE /items/:id - Delete product
- */
-router.delete("/delete_product/:id", async (req, res) => {
+// ✅ FIXED: GET all products with better error handling
+router.get('/get_product', async (req, res) => {
   try {
-    const deleted = await Product.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ message: "Item not found" });
-    res.json({ message: "Item deleted" });
+    const products = await Product.find()
+      .populate('category')
+      .populate('department')
+      .populate('keyFeatures')
+      .populate('diseases')
+      .sort({ createdAt: -1 });
+    
+    res.json({
+      success: true,
+      count: products.length,
+      data: products
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Error fetching products:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error fetching products',
+      error: error.message 
+    });
+  }
+});
+
+// ✅ FIXED: GET single product
+router.get('/get_product/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Validate ID format
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid product ID format' 
+      });
+    }
+
+    const product = await Product.findById(id)
+      .populate('category')
+      .populate('department')
+      .populate('keyFeatures')
+      .populate('diseases');
+
+    if (!product) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Product not found' 
+      });
+    }
+
+    res.json({
+      success: true,
+      data: product
+    });
+  } catch (error) {
+    console.error('Error fetching product:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error fetching product',
+      error: error.message 
+    });
+  }
+});
+
+// ✅ FIXED: UPDATE status only
+router.put('/put_status/:id/toggle-status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isActive } = req.body;
+
+    // Validate ID format
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid product ID format' 
+      });
+    }
+
+    const product = await Product.findByIdAndUpdate(
+      id,
+      { isActive: isActive, status: isActive },
+      { new: true }
+    );
+
+    if (!product) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Product not found' 
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Product ${isActive ? 'activated' : 'deactivated'} successfully`,
+      data: product
+    });
+  } catch (error) {
+    console.error('Error toggling status:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// ✅ FIXED: DELETE product
+router.delete('/delete_product/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Validate ID format
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid product ID format' 
+      });
+    }
+
+    const product = await Product.findById(id);
+    
+    if (!product) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Product not found' 
+      });
+    }
+
+    // Delete associated images
+    if (product.images && product.images.length > 0) {
+      product.images.forEach(image => {
+        const imagePath = path.join(__dirname, '..', image.url);
+        if (fs.existsSync(imagePath)) {
+          fs.unlink(imagePath, (err) => {
+            if (err) console.error('Error deleting product image:', err);
+          });
+        }
+      });
+    }
+
+    await Product.findByIdAndDelete(id);
+
+    res.json({ 
+      success: true,
+      message: 'Product deleted successfully' 
+    });
+  } catch (error) {
+    console.error('Error deleting product:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error deleting product',
+      error: error.message 
+    });
   }
 });
 

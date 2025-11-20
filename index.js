@@ -15,7 +15,7 @@ app.use(morgan("dev"));
 app.use(cookieParser());
 app.use(cors({ origin: "*" }));
 
-// Serve uploads statically
+// Serve uploads statically 
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // MongoDB connection
@@ -58,6 +58,33 @@ const HomeBannerRoute = require("./Route/HomeBannerRoute");
 app.use("/v1/api",  HomeBannerRoute);
 
 
+const carouselRoute = require("./Route/carouselRoute");
+app.use("/v1/api",  carouselRoute);
+
+const DiseaseRoute = require("./Route/DiseaseRoute");
+app.use("/v1/api",  DiseaseRoute);
+
+const TypeRoutes = require("./Route/TypeRoutes");
+app.use("/v1/api",  TypeRoutes);
+
+const CertificateRoutes = require("./Route/CertificateRoutes");
+app.use("/v1/api",  CertificateRoutes);
+
+const LabRoutes = require("./Route/LabRoutes");
+app.use("/v1/api",  LabRoutes);
+
+const BlogsRoute = require("./Route/BlogsRoute");
+app.use("/v1/api",  BlogsRoute);
+
+const BlogCatogryRoute = require("./Route/BlogCatogryRoute");
+app.use("/v1/api",  BlogCatogryRoute);
+
+// const pincodeRoutes = require("./Route/pincodeRoutes");
+// app.use("/v1/api",  pincodeRoutes);
+
+
+
+
 
 
 const PORT = process.env.PORT || 5000;
@@ -79,7 +106,7 @@ app.listen(PORT, () => {
 // const app = express();
 // const port = 9000;
 
-// // Middlewares
+// // Middlewares  
 // app.use(morgan("dev"));
 // app.use(cookieParser());
 // app.use(cors({ origin: "*" }));

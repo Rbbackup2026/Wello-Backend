@@ -2,11 +2,11 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const KeyFeature = require('../Models/KeyFeatures'); // Mongoose model
+const KeyFeature = require('../Models/KeyFeatures');
 
 const router = express.Router();
 
-// Multer setup
+// Multer setup - ONLY filename save करें
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const uploadDir = path.join(__dirname, '..', 'uploads');
@@ -36,11 +36,11 @@ const fileFilter = (req, file, cb) => {
 
 const upload = multer({
   storage,
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB max size
+  limits: { fileSize: 2 * 1024 * 1024 },
   fileFilter,
 });
 
-// POST route to create a new KeyFeature with Multer error handling middleware
+// ✅ FIXED: POST route - Only filename save करें
 router.post('/key_feature', (req, res, next) => {
   upload.single('keyimg')(req, res, function (err) {
     if (err && err.code === 'LIMIT_FILE_SIZE') {
@@ -67,12 +67,13 @@ router.post('/key_feature', (req, res, next) => {
     const lastFeature = await KeyFeature.findOne().sort({ sortOrder: -1 }).limit(1);
     const newSortOrder = lastFeature ? lastFeature.sortOrder + 1 : 1;
 
+    // ✅ FIX: Only filename save करें, not full path
     const newFeature = await KeyFeature.create({
       name,
       sortOrder: newSortOrder,
       status: status === 'true' || status === true,
-      keyimg: req.file.path,  // Save the file path
-      info: info || "",        // Save info, default to empty string if not provided
+      keyimg: req.file.filename,  // ✅ ONLY filename
+      info: info || "",
     });
 
     res.status(201).json({
@@ -85,17 +86,7 @@ router.post('/key_feature', (req, res, next) => {
   }
 });
 
-// GET route to fetch all KeyFeatures
-router.get('/key_feature_get', async (req, res) => {
-  try {
-    const keyFeatures = await KeyFeature.find().sort({ sortOrder: 1 });
-    res.status(200).json(keyFeatures);
-  } catch (err) {
-    console.error('Error fetching Key Features:', err);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
-// PUT route to update a KeyFeature
+// ✅ FIXED: PUT route - Only filename update करें
 router.put('/key_feature_put/:id', upload.single('keyimg'), async (req, res) => {
   try {
     const { id } = req.params;
@@ -112,7 +103,17 @@ router.put('/key_feature_put/:id', upload.single('keyimg'), async (req, res) => 
     };
 
     if (req.file) {
-      updateData.keyimg = req.file.path; // Update the image path if a new file is uploaded
+      // ✅ FIX: Only filename update करें
+      updateData.keyimg = req.file.filename;
+      
+      // Delete old image from server
+      const oldFeature = await KeyFeature.findById(id);
+      if (oldFeature && oldFeature.keyimg) {
+        const oldImagePath = path.join(__dirname, '..', 'uploads', oldFeature.keyimg);
+        fs.unlink(oldImagePath, (err) => {
+          if (err) console.error('Error deleting old image:', err);
+        });
+      }
     }
 
     const updatedFeature = await KeyFeature.findByIdAndUpdate(id, updateData, { new: true });
@@ -131,7 +132,7 @@ router.put('/key_feature_put/:id', upload.single('keyimg'), async (req, res) => 
   }
 });
 
-// DELETE route to delete a KeyFeature
+// ✅ FIXED: DELETE route - Correct file deletion
 router.delete('/key_feature_delete/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -142,9 +143,10 @@ router.delete('/key_feature_delete/:id', async (req, res) => {
       return res.status(404).json({ message: 'Key Feature not found' });
     }
 
-    // Optionally, delete the image file from the server
+    // ✅ FIX: Correct file path for deletion
     if (deletedFeature.keyimg) {
-      fs.unlink(deletedFeature.keyimg, (err) => {
+      const imagePath = path.join(__dirname, '..', 'uploads', deletedFeature.keyimg);
+      fs.unlink(imagePath, (err) => {
         if (err) console.error('Error deleting image file:', err);
       });
     }
@@ -159,11 +161,21 @@ router.delete('/key_feature_delete/:id', async (req, res) => {
   }
 });
 
+// GET route to fetch all KeyFeatures
+router.get('/key_feature_get', async (req, res) => {
+  try {
+    const keyFeatures = await KeyFeature.find().sort({ sortOrder: 1 });
+    res.status(200).json(keyFeatures);
+  } catch (err) {
+    console.error('Error fetching Key Features:', err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // GET route to fetch a single KeyFeature by ID
 router.get('/key_feature_get/:id', async (req, res) => {
   try {
     const { id } = req.params;
-
     const keyFeature = await KeyFeature.findById(id);
     if (!keyFeature) {
       return res.status(404).json({ message: 'Key Feature not found' });
@@ -173,10 +185,6 @@ router.get('/key_feature_get/:id', async (req, res) => {
     console.error('Error fetching Key Feature:', err);
     res.status(500).json({ message: 'Internal server error' });
   }
-}
-);
-
-
-
+});
 
 module.exports = router;

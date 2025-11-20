@@ -1,71 +1,179 @@
 const mongoose = require('mongoose');
 
 const productSchema = new mongoose.Schema({
+  // Basic Information
   name: {
     type: String,
     required: true,
     trim: true
   },
-  description: {
+  itemType: {
     type: String,
+    enum: ['Package', 'Test'],
+    default: 'Package'
+  },
+  testCount: {
+    type: Number,
+    default: 1,
+    min: 1
+  },
+
+  // Categorization
+  category: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Category',
     required: true
   },
-  category: {
-    type: String,
-    required: true,
-    index: true
+  department: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Department'
+  }],
+  diseases: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Disease'
   },
+  keyFeatures: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'KeyFeature'
+  }],
+
+  // Pricing
   price: {
     type: Number,
     required: true,
     min: 0
   },
-  discountPrice: {
+  mrp: {
     type: Number,
-    default: null,
     min: 0
   },
-  images: [
-    {
-      url: { type: String, required: true }
-    }
-  ],
-  stockQuantity: {
+  schedulePrice: {
     type: Number,
-    required: true,
     min: 0
   },
-  sku: {
+
+  // Location & Lab
+  city: {
     type: String,
-    unique: true,
     required: true
   },
-  brand: {
+  lab: {
+    type: String,
+    enum: ['lab1', 'lab2', 'lab3', ''],
+    default: ''
+  },
+
+  // Medical Information
+  reportingTime: {
     type: String
   },
-  ratingsAverage: {
+  specimen: {
+    type: String
+  },
+  certificate: {
+    type: String,
+    enum: ['certificate1', 'certificate2', 'certificate3', ''],
+    default: ''
+  },
+
+  // Age & Gender
+  fromAge: {
     type: Number,
     default: 0,
     min: 0,
-    max: 5
+    max: 100
   },
-  ratingsCount: {
+  toAge: {
     type: Number,
-    default: 0
+    default: 0,
+    min: 0,
+    max: 100
+  },
+  gender: {
+    type: String,
+    enum: ['Both', 'Male', 'Female'],
+    default: 'Both'
+  },
+
+  // Display Settings
+  showIn: {
+    type: String
+  },
+  showPopularPackage: {
+    type: String,
+    enum: ['Yes', 'No'],
+    default: 'No'
+  },
+  showInHome: {
+    type: Boolean,
+    default: false
+  },
+  showHomeBanner: {
+    type: Boolean,
+    default: false
+  },
+
+  // Dates
+  startDate: {
+    type: Date
+  },
+  endDate: {
+    type: Date
+  },
+
+  // SEO & Meta
+  metaTitle: {
+    type: String,
+    required: true
+  },
+  metaKeywords: {
+    type: String,
+    required: true
+  },
+  metaDescription: {
+    type: String,
+    required: true
+  },
+  metaSchema: {
+    type: String
+  },
+
+  // Images
+  images: [{
+    url: { 
+      type: String, 
+      required: true 
+    }
+  }],
+
+  // Status
+  status: {
+    type: Boolean,
+    default: true
   },
   isActive: {
     type: Boolean,
     default: true
   },
+
+  // Timestamps
   createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
     type: Date,
     default: Date.now
   }
 });
 
+// Update the updatedAt field before saving
+productSchema.pre('save', function(next) {
+  this.updatedAt = Date.now();
+  next();
+});
+
 module.exports = mongoose.model('Product', productSchema);
-
-
 
 
 
