@@ -5,11 +5,10 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// ✅ FIXED: Multer configuration with proper setup
+// ✅ Multer configuration for image upload
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     const uploadDir = path.join(__dirname, '..', 'uploads');
-    // Create directory if it doesn't exist
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
@@ -36,7 +35,7 @@ const upload = multer({
   }
 });
 
-// ✅ FIXED: POST product with better error handling
+// ✅ POST product - MATCHING FRONTEND FIELDS
 router.post('/post_product', upload.single('iconImg'), async (req, res) => {
   try {
     const productData = { ...req.body };
@@ -44,71 +43,77 @@ router.post('/post_product', upload.single('iconImg'), async (req, res) => {
     console.log('Received data:', productData);
     console.log('File received:', req.file);
 
-    // ✅ Handle array fields safely
-    if (productData.keyFeatures) {
-      try {
-        productData.keyFeatures = typeof productData.keyFeatures === 'string' 
-          ? JSON.parse(productData.keyFeatures) 
-          : productData.keyFeatures;
-      } catch (e) {
-        console.error('Error parsing keyFeatures:', e);
-        productData.keyFeatures = [];
-      }
-    }
-
-    if (productData.department) {
-      try {
-        productData.department = typeof productData.department === 'string'
-          ? JSON.parse(productData.department)
-          : productData.department;
-      } catch (e) {
-        console.error('Error parsing department:', e);
-        productData.department = [];
-      }
-    }
-
-    // ✅ Handle numeric conversions safely
-    const numericFields = ['price', 'mrp', 'schedulePrice', 'testCount', 'fromAge', 'toAge'];
-    numericFields.forEach(field => {
+    // ✅ Handle array fields - MATCHING FRONTEND FIELD NAMES
+    const arrayFields = ['keyFeatures', 'department'];
+    arrayFields.forEach(field => {
       if (productData[field]) {
-        productData[field] = Number(productData[field]);
-        if (isNaN(productData[field])) {
-          productData[field] = 0;
+        try {
+          productData[field] = typeof productData[field] === 'string' 
+            ? JSON.parse(productData[field]) 
+            : productData[field];
+        } catch (e) {
+          console.error(`Error parsing ${field}:`, e);
+          productData[field] = [];
         }
       }
     });
 
-    // ✅ Handle boolean fields
-    const booleanFields = ['showInHome', 'showHomeBanner', 'status', 'isActive'];
-    booleanFields.forEach(field => {
-      if (productData[field] !== undefined) {
-        productData[field] = productData[field] === 'true' || productData[field] === true;
+    // ✅ Handle numeric conversions - MATCHING FRONTEND FIELD NAMES
+    const numericFields = [
+      'price', 'mrp', 'schedulePrice', 'testCount', 'fromAge', 'toAge'
+    ];
+    numericFields.forEach(field => {
+      if (productData[field] !== undefined && productData[field] !== '') {
+        productData[field] = Number(productData[field]);
+        if (isNaN(productData[field])) {
+          productData[field] = field === 'testCount' ? 1 : 0;
+        }
       }
     });
 
-    // ✅ Handle image
+    // ✅ Handle boolean fields - MATCHING FRONTEND FIELD NAMES
+    const booleanFields = ['showInHome', 'showHomeBanner', 'status'];
+    booleanFields.forEach(field => {
+      if (productData[field] !== undefined) {
+        productData[field] = productData[field] === 'true' || productData[field] === true || productData[field] === '1';
+      }
+    });
+
+    // ✅ Handle image - MATCHING FRONTEND FIELD NAME 'iconImg'
     if (req.file) {
-      productData.images = [{
-        url: `/uploads/${req.file.filename}`
-      }];
-    } else {
-      productData.images = [];
+      productData.iconImg = req.file.filename; // ✅ Store filename directly as frontend expects
     }
 
     // ✅ Set default values for required fields
-    if (!productData.metaTitle) productData.metaTitle = productData.name;
-    if (!productData.metaKeywords) productData.metaKeywords = productData.name;
-    if (!productData.metaDescription) productData.metaDescription = productData.name;
+    if (!productData.metaTitle && productData.name) {
+      productData.metaTitle = productData.name;
+    }
+    if (!productData.metaKeywords && productData.name) {
+      productData.metaKeywords = productData.name;
+    }
+    if (!productData.metaDescription && productData.name) {
+      productData.metaDescription = productData.name;
+    }
+
+    // ✅ Ensure city is required as per frontend validation
+    if (!productData.city) {
+      return res.status(400).json({
+        success: false,
+        message: 'City is required'
+      });
+    }
 
     const product = new Product(productData);
     await product.save();
 
-    // ✅ Populate references
+    // ✅ Populate references - MATCHING FRONTEND FIELD NAMES
     const populatedProduct = await Product.findById(product._id)
       .populate('category')
       .populate('department')
       .populate('keyFeatures')
-      .populate('diseases');
+      .populate('diseases')
+      .populate('certificate')
+      .populate('lab');
 
     res.status(201).json({
       success: true,
@@ -119,7 +124,7 @@ router.post('/post_product', upload.single('iconImg'), async (req, res) => {
   } catch (error) {
     console.error('Error creating product:', error);
     
-    // ✅ Delete uploaded file if there was an error
+    // Delete uploaded file if there was an error
     if (req.file) {
       fs.unlink(req.file.path, (err) => {
         if (err) console.error('Error deleting uploaded file:', err);
@@ -134,11 +139,14 @@ router.post('/post_product', upload.single('iconImg'), async (req, res) => {
   }
 });
 
-// ✅ FIXED: UPDATE product route
-router.put('/put_product/:id', upload.single('iconImg'), async (req, res) => {
+// ✅ UPDATE product route - MATCHING FRONTEND FIELDS
+router.put('/items/:id', upload.single('iconImg'), async (req, res) => {
   try {
     const { id } = req.params;
     const productData = { ...req.body };
+
+    console.log('Updating product ID:', id);
+    console.log('Update data:', productData);
 
     // ✅ Check if product exists
     const existingProduct = await Product.findById(id);
@@ -149,72 +157,62 @@ router.put('/put_product/:id', upload.single('iconImg'), async (req, res) => {
       });
     }
 
-    // ✅ Handle array fields safely
-    if (productData.keyFeatures) {
-      try {
-        productData.keyFeatures = typeof productData.keyFeatures === 'string' 
-          ? JSON.parse(productData.keyFeatures) 
-          : productData.keyFeatures;
-      } catch (e) {
-        console.error('Error parsing keyFeatures:', e);
-        productData.keyFeatures = existingProduct.keyFeatures;
-      }
-    }
-
-    if (productData.department) {
-      try {
-        productData.department = typeof productData.department === 'string'
-          ? JSON.parse(productData.department)
-          : productData.department;
-      } catch (e) {
-        console.error('Error parsing department:', e);
-        productData.department = existingProduct.department;
-      }
-    }
-
-    // ✅ Handle numeric conversions safely
-    const numericFields = ['price', 'mrp', 'schedulePrice', 'testCount', 'fromAge', 'toAge'];
-    numericFields.forEach(field => {
+    // ✅ Handle array fields - MATCHING FRONTEND FIELD NAMES
+    const arrayFields = ['keyFeatures', 'department'];
+    arrayFields.forEach(field => {
       if (productData[field]) {
-        productData[field] = Number(productData[field]);
-        if (isNaN(productData[field])) {
-          productData[field] = existingProduct[field] || 0;
+        try {
+          productData[field] = typeof productData[field] === 'string' 
+            ? JSON.parse(productData[field]) 
+            : productData[field];
+        } catch (e) {
+          console.error(`Error parsing ${field}:`, e);
+          productData[field] = existingProduct[field];
         }
       }
     });
 
-    // ✅ Handle boolean fields
-    const booleanFields = ['showInHome', 'showHomeBanner', 'status', 'isActive'];
-    booleanFields.forEach(field => {
-      if (productData[field] !== undefined) {
-        productData[field] = productData[field] === 'true' || productData[field] === true;
+    // ✅ Handle numeric conversions - MATCHING FRONTEND FIELD NAMES
+    const numericFields = [
+      'price', 'mrp', 'schedulePrice', 'testCount', 'fromAge', 'toAge'
+    ];
+    numericFields.forEach(field => {
+      if (productData[field] !== undefined && productData[field] !== '') {
+        productData[field] = Number(productData[field]);
+        if (isNaN(productData[field])) {
+          productData[field] = existingProduct[field] || (field === 'testCount' ? 1 : 0);
+        }
       }
     });
 
-    // ✅ Handle image update
+    // ✅ Handle boolean fields - MATCHING FRONTEND FIELD NAMES
+    const booleanFields = ['showInHome', 'showHomeBanner', 'status'];
+    booleanFields.forEach(field => {
+      if (productData[field] !== undefined) {
+        productData[field] = productData[field] === 'true' || productData[field] === true || productData[field] === '1';
+      }
+    });
+
+    // ✅ Handle image update - MATCHING FRONTEND FIELD NAME 'iconImg'
     if (req.file) {
-      // Delete old images if they exist
-      if (existingProduct.images && existingProduct.images.length > 0) {
-        existingProduct.images.forEach(image => {
-          const oldImagePath = path.join(__dirname, '..', image.url);
-          if (fs.existsSync(oldImagePath)) {
-            fs.unlink(oldImagePath, (err) => {
-              if (err) console.error('Error deleting old image:', err);
-            });
-          }
-        });
+      // Delete old image if it exists
+      if (existingProduct.iconImg) {
+        const oldImagePath = path.join(__dirname, '..', 'uploads', existingProduct.iconImg);
+        if (fs.existsSync(oldImagePath)) {
+          fs.unlink(oldImagePath, (err) => {
+            if (err) console.error('Error deleting old image:', err);
+          });
+        }
       }
       
-      productData.images = [{
-        url: `/uploads/${req.file.filename}`
-      }];
+      productData.iconImg = req.file.filename; // ✅ Store filename directly
     }
 
     const updatedProduct = await Product.findByIdAndUpdate(
       id,
       productData,
       { new: true, runValidators: true }
-    ).populate(['category', 'department', 'keyFeatures', 'diseases']);
+    ).populate(['category', 'department', 'keyFeatures', 'diseases', 'certificate', 'lab']);
 
     res.json({
       success: true,
@@ -225,7 +223,7 @@ router.put('/put_product/:id', upload.single('iconImg'), async (req, res) => {
   } catch (error) {
     console.error('Error updating product:', error);
     
-    // ✅ Delete uploaded file if there was an error
+    // Delete uploaded file if there was an error
     if (req.file) {
       fs.unlink(req.file.path, (err) => {
         if (err) console.error('Error deleting uploaded file:', err);
@@ -240,7 +238,7 @@ router.put('/put_product/:id', upload.single('iconImg'), async (req, res) => {
   }
 });
 
-// ✅ FIXED: GET all products with better error handling
+// ✅ GET all products with population
 router.get('/get_product', async (req, res) => {
   try {
     const products = await Product.find()
@@ -248,6 +246,8 @@ router.get('/get_product', async (req, res) => {
       .populate('department')
       .populate('keyFeatures')
       .populate('diseases')
+      .populate('certificate')
+      .populate('lab')
       .sort({ createdAt: -1 });
     
     res.json({
@@ -265,7 +265,7 @@ router.get('/get_product', async (req, res) => {
   }
 });
 
-// ✅ FIXED: GET single product
+// ✅ GET single product
 router.get('/get_product/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -282,7 +282,9 @@ router.get('/get_product/:id', async (req, res) => {
       .populate('category')
       .populate('department')
       .populate('keyFeatures')
-      .populate('diseases');
+      .populate('diseases')
+      .populate('certificate')
+      .populate('lab');
 
     if (!product) {
       return res.status(404).json({ 
@@ -305,7 +307,7 @@ router.get('/get_product/:id', async (req, res) => {
   }
 });
 
-// ✅ FIXED: UPDATE status only
+// ✅ UPDATE status only
 router.put('/put_status/:id/toggle-status', async (req, res) => {
   try {
     const { id } = req.params;
@@ -346,7 +348,7 @@ router.put('/put_status/:id/toggle-status', async (req, res) => {
   }
 });
 
-// ✅ FIXED: DELETE product
+// ✅ DELETE product
 router.delete('/delete_product/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -368,16 +370,14 @@ router.delete('/delete_product/:id', async (req, res) => {
       });
     }
 
-    // Delete associated images
-    if (product.images && product.images.length > 0) {
-      product.images.forEach(image => {
-        const imagePath = path.join(__dirname, '..', image.url);
-        if (fs.existsSync(imagePath)) {
-          fs.unlink(imagePath, (err) => {
-            if (err) console.error('Error deleting product image:', err);
-          });
-        }
-      });
+    // Delete associated image
+    if (product.iconImg) {
+      const imagePath = path.join(__dirname, '..', 'uploads', product.iconImg);
+      if (fs.existsSync(imagePath)) {
+        fs.unlink(imagePath, (err) => {
+          if (err) console.error('Error deleting product image:', err);
+        });
+      }
     }
 
     await Product.findByIdAndDelete(id);

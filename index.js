@@ -79,8 +79,12 @@ app.use("/v1/api",  BlogsRoute);
 const BlogCatogryRoute = require("./Route/BlogCatogryRoute");
 app.use("/v1/api",  BlogCatogryRoute);
 
-// const pincodeRoutes = require("./Route/pincodeRoutes");
-// app.use("/v1/api",  pincodeRoutes);
+const BlogTgasRoute = require("./Route/BlogTgasRoute");
+app.use("/v1/api",  BlogTgasRoute);
+
+const CouponCreateRoute = require("./Route/CouponCreateRoute");
+app.use("/v1/api",  CouponCreateRoute);
+
 
 
 

@@ -18,7 +18,6 @@ const productSchema = new mongoose.Schema({
     min: 1
   },
 
-  // Categorization
   category: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Category',
@@ -37,7 +36,6 @@ const productSchema = new mongoose.Schema({
     ref: 'KeyFeature'
   }],
 
-  // Pricing
   price: {
     type: Number,
     required: true,
@@ -52,7 +50,6 @@ const productSchema = new mongoose.Schema({
     min: 0
   },
 
-  // Location & Lab
   city: {
     type: String,
     required: true
@@ -63,7 +60,6 @@ const productSchema = new mongoose.Schema({
     default: ''
   },
 
-  // Medical Information
   reportingTime: {
     type: String
   },
@@ -76,7 +72,6 @@ const productSchema = new mongoose.Schema({
     default: ''
   },
 
-  // Age & Gender
   fromAge: {
     type: Number,
     default: 0,
@@ -95,7 +90,6 @@ const productSchema = new mongoose.Schema({
     default: 'Both'
   },
 
-  // Display Settings
   showIn: {
     type: String
   },
@@ -113,7 +107,6 @@ const productSchema = new mongoose.Schema({
     default: false
   },
 
-  // Dates
   startDate: {
     type: Date
   },
@@ -121,7 +114,6 @@ const productSchema = new mongoose.Schema({
     type: Date
   },
 
-  // SEO & Meta
   metaTitle: {
     type: String,
     required: true
@@ -138,7 +130,6 @@ const productSchema = new mongoose.Schema({
     type: String
   },
 
-  // Images
   images: [{
     url: { 
       type: String, 
@@ -146,7 +137,6 @@ const productSchema = new mongoose.Schema({
     }
   }],
 
-  // Status
   status: {
     type: Boolean,
     default: true
@@ -156,7 +146,6 @@ const productSchema = new mongoose.Schema({
     default: true
   },
 
-  // Timestamps
   createdAt: {
     type: Date,
     default: Date.now
@@ -167,7 +156,6 @@ const productSchema = new mongoose.Schema({
   }
 });
 
-// Update the updatedAt field before saving
 productSchema.pre('save', function(next) {
   this.updatedAt = Date.now();
   next();

@@ -266,8 +266,6 @@
 
 
 
-
-
 const model = require("../Models/Register");
 const express = require("express");
 const router = express.Router();
@@ -302,33 +300,26 @@ router.post("/register", async (req, res) => {
       confirmPassword: hash,
     });
 
-    // JWT token generate karein (7 days ke liye)
+    // JWT token generate (10 minutes)
     const token = jwt.sign(
-      { 
-        email: userdata.email,
-        id: userdata._id 
-      },
+      { email: userdata.email, id: userdata._id },
       process.env.JWT_SECRET || "defaultSecretKey",
-      { expiresIn: "7d" } // 7 days
+      { expiresIn: "10m" }
     );
 
-    // Cookie set karein
+    // Cookie set (10 minutes)
     res.cookie("token", token, {
       httpOnly: true,
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: 10 * 60 * 1000,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict'
     });
 
-    // ✅ Response mein token bhi bhejein
     res.status(201).json({ 
-      msg: "User registered successfully", 
-      userdata: {
-        _id: userdata._id,
-        email: userdata.email
-      },
-      token: token, // ✅ Token frontend ko bhej rahe hain
-      expiresIn: "7d"
+      msg: "User registered successfully",
+      userdata: { _id: userdata._id, email: userdata.email },
+      token: token,
+      expiresIn: "10m"
     });
 
   } catch (error) {
@@ -336,7 +327,7 @@ router.post("/register", async (req, res) => {
   }
 });
 
-// LOGIN ROUTE - FIXED
+// LOGIN ROUTE
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -355,36 +346,26 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ msg: "Invalid password" });
     }
 
-    // JWT token expires in 7 days
     const token = jwt.sign(
-      { 
-        email: userdata.email,
-        id: userdata._id 
-      },
+      { email: userdata.email, id: userdata._id },
       process.env.JWT_SECRET || "defaultSecretKey",
-      { expiresIn: "7d" } // 7 days instead of 5 minutes
+      { expiresIn: "10m" } // 10 minutes
     );
 
-    // Cookie set karein
     res.cookie("token", token, {
       httpOnly: true,
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: 10 * 60 * 1000, // 10 minutes
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict'
     });
 
-    // ✅ IMPORTANT: Response mein token bhi bhejein
     res.status(200).json({ 
-      msg: "Login successful", 
-      userdata: {
-        _id: userdata._id,
-        email: userdata.email
-      },
-      token: token, // ✅ Token frontend ko bhej rahe hain
-      expiresIn: "7d"
+      msg: "Login successful",
+      userdata: { _id: userdata._id, email: userdata.email },
+      token: token,
+      expiresIn: "10m"
     });
-    
-    console.log("Login successful for:", email);
+
   } catch (error) {
     res.status(500).json({ msg: "Server error", error: error.message });
   }
@@ -394,7 +375,7 @@ router.post("/login", async (req, res) => {
 router.post("/logout", (req, res) => {
   try {
     res.cookie("token", "", { 
-      httpOnly: true, 
+      httpOnly: true,
       expires: new Date(0),
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict'
@@ -412,10 +393,7 @@ router.post("/logout", (req, res) => {
 // AUTH USER ROUTE
 router.get("/authuser", async (req, res) => {
   try {
-    // Pehle cookies se token check karein
     let token = req.cookies.token;
-    
-    // Agar cookie mein nahi hai to authorization header se check karein
     if (!token && req.headers.authorization) {
       token = req.headers.authorization.replace('Bearer ', '');
     }
@@ -439,8 +417,9 @@ router.get("/authuser", async (req, res) => {
     res.status(200).json({ 
       success: true, 
       user: userdata,
-      token: token // Optional: new token send karein
+      token: token
     });
+
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -455,14 +434,10 @@ router.post("/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
 
-    if (!email) {
-      return res.status(400).json({ message: "Email is required" });
-    }
+    if (!email) return res.status(400).json({ message: "Email is required" });
 
     const user = await model.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ message: "No user found with this email." });
-    }
+    if (!user) return res.status(404).json({ message: "No user found with this email." });
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET || "defaultSecretKey", {
       expiresIn: "1h",
@@ -470,29 +445,21 @@ router.post("/forgot-password", async (req, res) => {
 
     const resetLink = `${process.env.CLIENT_URL || 'http://localhost:3000'}/reset-password/${token}`;
 
-    // Send email
     const transporter = nodemailer.createTransport({
       service: "gmail",
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
+      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
     });
 
-    const mailOptions = {
+    await transporter.sendMail({
       from: `"Support" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: "Password Reset Request",
-      html: `
-        <p>Hello,</p>
-        <p>You requested to reset your password.</p>
-        <p>Click the link below to reset:</p>
-        <a href="${resetLink}">${resetLink}</a>
-        <p>This link will expire in 1 hour.</p>
-      `,
-    };
+      html: `<p>Hello,</p><p>You requested to reset your password.</p>
+             <p>Click the link below to reset:</p>
+             <a href="${resetLink}">${resetLink}</a>
+             <p>This link will expire in 1 hour.</p>`
+    });
 
-    await transporter.sendMail(mailOptions);
     res.status(200).json({ message: "Reset link sent to email." });
   } catch (err) {
     console.error(err);
@@ -505,10 +472,8 @@ router.post("/verify-otp", async (req, res) => {
   try {
     const { email, otp } = req.body;
     const user = await model.findOne({ email });
-    
-    if (!user) {
-      return res.status(404).json({ success: false, msg: "User not found" });
-    }
+
+    if (!user) return res.status(404).json({ success: false, msg: "User not found" });
 
     if (user.otp !== otp || user.otpExpires < Date.now()) {
       return res.status(400).json({ success: false, msg: "Invalid or expired OTP" });
@@ -525,15 +490,11 @@ router.post("/reset-password", async (req, res) => {
   try {
     const { email, otp, newPassword, confirmPassword } = req.body;
     const user = await model.findOne({ email });
-    
-    if (!user) {
-      return res.status(404).json({ success: false, msg: "User not found" });
-    }
 
+    if (!user) return res.status(404).json({ success: false, msg: "User not found" });
     if (user.otp !== otp || user.otpExpires < Date.now()) {
       return res.status(400).json({ success: false, msg: "Invalid or expired OTP" });
     }
-
     if (newPassword !== confirmPassword) {
       return res.status(400).json({ success: false, msg: "Passwords do not match" });
     }

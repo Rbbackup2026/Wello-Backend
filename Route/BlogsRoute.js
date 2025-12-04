@@ -223,5 +223,27 @@ router.get("/blogget-active", async (req, res) => {
   }
 });
 
+router.get("/blog-categories-with-count", async (req, res) => {
+  try {
+    const categories = await Category.find();
+
+    const result = await Promise.all(
+      categories.map(async (cat) => {
+        const blogCount = await Blog.countDocuments({ category: cat._id });
+        return {
+          _id: cat._id,
+          name: cat.name,
+          blogCount,
+        };
+      })
+    );
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ message: "Server Error" });
+  }
+});
+
+
 
 module.exports = router;
