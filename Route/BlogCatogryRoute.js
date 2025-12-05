@@ -35,7 +35,7 @@ router.get('/categorybloget', async (req, res) => {
         totalItems: total,
         itemsPerPage: limit
       }
-    });
+    })
     
   } catch (error) {
     console.error('Get categories error:', error);
