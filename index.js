@@ -58,8 +58,8 @@ const HomeBannerRoute = require("./Route/HomeBannerRoute");
 app.use("/v1/api",  HomeBannerRoute);
 
 
-const carouselRoute = require("./Route/carouselRoute");
-app.use("/v1/api",  carouselRoute);
+const CarouselRoute = require("./Route/CarouselRoute");
+app.use("/v1/api",  CarouselRoute);
 
 const DiseaseRoute = require("./Route/DiseaseRoute");
 app.use("/v1/api",  DiseaseRoute);
