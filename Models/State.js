@@ -34,16 +34,13 @@ const stateSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Compound index for unique constraint
 stateSchema.index({ name: 1 }, { unique: true });
 stateSchema.index({ apiId: 1 }, { unique: true });
 
-// Virtual for createdAt date in YYYY-MM-DD format
 stateSchema.virtual('createdAtFormatted').get(function() {
   return this.createdAt.toISOString().split('T')[0];
 });
 
-// Ensure virtual fields are serialized
 stateSchema.set('toJSON', {
   virtuals: true,
   transform: function(doc, ret) {

@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
-const Blog = require("../models/Blog");
+const Blog = require("../Models/Blog");
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || "uploads";
 const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
