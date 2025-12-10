@@ -6,7 +6,7 @@ const fs = require("fs");
 const Blog = require("../Models/Blog");
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || "uploads";
-const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
+const BASE_URL = process.env.BASE_URL || "https://razobytehealthcare-website-backend-code.onrender.com/";
 
 // ensure upload dir exists
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });

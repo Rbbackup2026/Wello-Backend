@@ -17,7 +17,7 @@ router.post('/register-mobile', async (req, res) => {
         if (!customer) {
             customer = new Customer({ mobile, password });
         } else {
-            customer.password = password; // update password on re-login if needed
+            customer.password = password; 
         }
 
         const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
