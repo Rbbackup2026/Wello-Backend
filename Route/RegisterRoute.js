@@ -341,10 +341,18 @@ router.post("/login", async (req, res) => {
       return res.status(404).json({ msg: "User not found" });
     }
 
+    if (!userdata.password) {
+      return res.status(401).json({ msg: "Invalid password" });
+    }
+
     const isMatch = await bcrypt.compare(password, userdata.password);
     if (!isMatch) {
       return res.status(401).json({ msg: "Invalid password" });
     }
+
+    const userResponse = userdata.toObject();
+    delete userResponse.password;
+    delete userResponse.confirmPassword;
 
     const token = jwt.sign(
       { email: userdata.email, id: userdata._id },
@@ -361,7 +369,7 @@ router.post("/login", async (req, res) => {
 
     res.status(200).json({ 
       msg: "Login successful",
-      userdata: { _id: userdata._id, email: userdata.email },
+      userdata: userResponse,
       token: token,
       expiresIn: "10m"
     });
@@ -464,53 +472,6 @@ router.post("/forgot-password", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to send email." });
-  }
-});
-
-// VERIFY OTP
-router.post("/verify-otp", async (req, res) => {
-  try {
-    const { email, otp } = req.body;
-    const user = await model.findOne({ email });
-
-    if (!user) return res.status(404).json({ success: false, msg: "User not found" });
-
-    if (user.otp !== otp || user.otpExpires < Date.now()) {
-      return res.status(400).json({ success: false, msg: "Invalid or expired OTP" });
-    }
-
-    res.json({ success: true, msg: "OTP verified" });
-  } catch (error) {
-    res.status(500).json({ success: false, msg: "Server error", error: error.message });
-  }
-});
-
-// RESET PASSWORD
-router.post("/reset-password", async (req, res) => {
-  try {
-    const { email, otp, newPassword, confirmPassword } = req.body;
-    const user = await model.findOne({ email });
-
-    if (!user) return res.status(404).json({ success: false, msg: "User not found" });
-    if (user.otp !== otp || user.otpExpires < Date.now()) {
-      return res.status(400).json({ success: false, msg: "Invalid or expired OTP" });
-    }
-    if (newPassword !== confirmPassword) {
-      return res.status(400).json({ success: false, msg: "Passwords do not match" });
-    }
-
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(newPassword, salt);
-
-    user.password = hashedPassword;
-    user.confirmPassword = hashedPassword;
-    user.otp = null;
-    user.otpExpires = null;
-
-    await user.save();
-    res.json({ success: true, msg: "Password reset successfully" });
-  } catch (error) {
-    res.status(500).json({ success: false, msg: "Server error", error: error.message });
   }
 });
 

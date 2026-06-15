@@ -4,54 +4,87 @@ const Disease = require('../Models/Disease');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadDir = 'public/uploads/diseases/';
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'disease-' + uniqueSuffix + path.extname(file.originalname));
-  }
+// =============================================
+// Cloudinary Configuration
+// =============================================
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const fileFilter = (req, file, cb) => {
-  if (file.mimetype.startsWith('image/')) {
-    cb(null, true);
-  } else {
-    cb(new Error('Only image files are allowed!'), false);
+// =============================================
+// Multer + Cloudinary Storage
+// =============================================
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: 'diseases', // Cloudinary mein "diseases" folder mein save hoga
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    transformation: [{ width: 500, height: 500, crop: 'limit' }],
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed!'), false);
+    }
+  },
+});
+
+// =============================================
+// HELPER: Format disease object with imageUrl
+// =============================================
+const formatDisease = (disease) => {
+  const obj = disease.toObject ? disease.toObject() : { ...disease };
+  // iconimg ab Cloudinary ka poora URL hai
+  obj.imageUrl = obj.iconimg || null;
+  return obj;
+};
+
+// Helper: Delete image from Cloudinary
+const deleteFromCloudinary = async (iconimg) => {
+  if (!iconimg) return;
+  try {
+    // Cloudinary URL se public_id nikalo
+    // URL format: https://res.cloudinary.com/cloud_name/image/upload/v123/diseases/filename.jpg
+    const urlParts = iconimg.split('/');
+    const fileName = urlParts[urlParts.length - 1].split('.')[0]; // filename without extension
+    const folderIndex = urlParts.indexOf('diseases');
+    if (folderIndex !== -1) {
+      const publicId = `diseases/${fileName}`;
+      await cloudinary.uploader.destroy(publicId);
+    }
+  } catch (err) {
+    console.error('Cloudinary delete error:', err);
   }
 };
 
-const upload = multer({
-  storage: storage,
-  fileFilter: fileFilter,
-  limits: {
-    fileSize: 5 * 1024 * 1024
-  }
-});
-
-// GET all diseases with search, pagination and filters
+// =============================================
+// GET all diseases (search, pagination, filters)
+// =============================================
 router.get('/diseasepost', async (req, res) => {
   try {
-    const { 
-      search, 
-      page = 1, 
-      limit = 10, 
-      status, 
+    const {
+      search,
+      page = 1,
+      limit = 10,
+      status,
       isActive,
       department,
-      showHome 
+      showHome
     } = req.query;
-    
-    // Build filter object
+
     const filter = {};
-    
+
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: 'i' } },
@@ -59,22 +92,11 @@ router.get('/diseasepost', async (req, res) => {
         { description: { $regex: search, $options: 'i' } }
       ];
     }
-    
-    if (status && status !== 'all') {
-      filter.status = status;
-    }
 
-    if (isActive !== undefined) {
-      filter.isActive = isActive === 'true';
-    }
-
-    if (department) {
-      filter.department = { $regex: department, $options: 'i' };
-    }
-
-    if (showHome !== undefined) {
-      filter.showHome = showHome === 'true';
-    }
+    if (status && status !== 'all') filter.status = status;
+    if (isActive !== undefined) filter.isActive = isActive === 'true';
+    if (department) filter.department = { $regex: department, $options: 'i' };
+    if (showHome !== undefined) filter.showHome = showHome === 'true';
 
     const options = {
       page: parseInt(page),
@@ -84,13 +106,13 @@ router.get('/diseasepost', async (req, res) => {
 
     const diseases = await Disease.find(filter)
       .sort(options.sort)
-      .limit(options.limit * 1)
+      .limit(options.limit)
       .skip((options.page - 1) * options.limit);
 
     const total = await Disease.countDocuments(filter);
 
     res.json({
-      diseases,
+      diseases: diseases.map(formatDisease),
       totalPages: Math.ceil(total / options.limit),
       currentPage: options.page,
       total
@@ -100,48 +122,61 @@ router.get('/diseasepost', async (req, res) => {
   }
 });
 
+// =============================================
+// GET active diseases only (public API)
+// =============================================
+router.get('/diseasepost/active/list', async (req, res) => {
+  try {
+    const diseases = await Disease.getActiveDiseases();
+    res.json(diseases.map(formatDisease));
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// =============================================
+// GET disease statistics
+// =============================================
+router.get('/diseasepost/stats/counts', async (req, res) => {
+  try {
+    const total = await Disease.countDocuments();
+    const active = await Disease.countDocuments({ isActive: true });
+    const inactive = await Disease.countDocuments({ isActive: false });
+    const showHome = await Disease.countDocuments({ showHome: true });
+
+    res.json({ total, active, inactive, showHome });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// =============================================
 // GET single disease by ID
+// =============================================
 router.get('/diseasepost/:id', async (req, res) => {
   try {
     const disease = await Disease.findById(req.params.id);
     if (!disease) {
       return res.status(404).json({ message: 'Disease not found' });
     }
-    res.json(disease);
+    res.json(formatDisease(disease));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// GET active diseases only (for public APIs)
-router.get('/diseasepost/active/list', async (req, res) => {
-  try {
-    const diseases = await Disease.getActiveDiseases();
-    res.json(diseases);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
+// =============================================
 // CREATE new disease
+// =============================================
 router.post('/diseasepost', upload.single('iconimg'), async (req, res) => {
   try {
-    const { 
-      name, 
-      department, 
-      sortOrder, 
-      showHome, 
-      status, 
-      description,
-      isActive 
-    } = req.body;
+    const { name, department, sortOrder, showHome, status, description, isActive } = req.body;
 
-    // Check if disease already exists
+    // Duplicate check
     const existingDisease = await Disease.findOne({ name, department });
     if (existingDisease) {
-      if (req.file) {
-        fs.unlinkSync(req.file.path);
-      }
+      // Agar image upload ho gayi thi to Cloudinary se delete karo
+      if (req.file) await deleteFromCloudinary(req.file.path);
       return res.status(400).json({ message: 'Disease already exists in this department' });
     }
 
@@ -155,59 +190,45 @@ router.post('/diseasepost', upload.single('iconimg'), async (req, res) => {
       isActive: isActive !== undefined ? isActive === 'true' : true
     };
 
-    // Add image filename if uploaded
+    // ✅ Cloudinary URL directly save karo (req.file.path = Cloudinary URL)
     if (req.file) {
-      diseaseData.iconimg = req.file.filename;
+      diseaseData.iconimg = req.file.path;
     }
 
     const disease = new Disease(diseaseData);
     const newDisease = await disease.save();
-    
+
     res.status(201).json({
       message: 'Disease created successfully',
-      disease: newDisease
+      disease: formatDisease(newDisease)
     });
   } catch (error) {
-    if (req.file) {
-      fs.unlinkSync(req.file.path);
-    }
+    if (req.file) await deleteFromCloudinary(req.file.path);
     res.status(400).json({ message: error.message });
   }
 });
 
+// =============================================
 // UPDATE disease
+// =============================================
 router.put('/diseasepost/:id', upload.single('iconimg'), async (req, res) => {
   try {
-    const { 
-      name, 
-      department, 
-      sortOrder, 
-      showHome, 
-      status, 
-      description,
-      isActive 
-    } = req.body;
+    const { name, department, sortOrder, showHome, status, description, isActive } = req.body;
 
-    // Check if disease exists
     const disease = await Disease.findById(req.params.id);
     if (!disease) {
-      if (req.file) {
-        fs.unlinkSync(req.file.path);
-      }
+      if (req.file) await deleteFromCloudinary(req.file.path);
       return res.status(404).json({ message: 'Disease not found' });
     }
 
-    // Check for duplicate disease name
+    // Duplicate check
     const existingDisease = await Disease.findOne({
       name,
       department,
       _id: { $ne: req.params.id }
     });
-    
     if (existingDisease) {
-      if (req.file) {
-        fs.unlinkSync(req.file.path);
-      }
+      if (req.file) await deleteFromCloudinary(req.file.path);
       return res.status(400).json({ message: 'Disease already exists in this department' });
     }
 
@@ -220,21 +241,16 @@ router.put('/diseasepost/:id', upload.single('iconimg'), async (req, res) => {
       description
     };
 
-    // Add isActive if provided
     if (isActive !== undefined) {
       updateData.isActive = isActive === 'true';
     }
 
-    // Handle image update
+    // ✅ Nai image upload hui to purani Cloudinary se delete karo
     if (req.file) {
-      // Delete old image if exists
       if (disease.iconimg) {
-        const oldImagePath = path.join('public/uploads/diseases/', disease.iconimg);
-        if (fs.existsSync(oldImagePath)) {
-          fs.unlinkSync(oldImagePath);
-        }
+        await deleteFromCloudinary(disease.iconimg);
       }
-      updateData.iconimg = req.file.filename;
+      updateData.iconimg = req.file.path; // Cloudinary URL
     }
 
     const updatedDisease = await Disease.findByIdAndUpdate(
@@ -245,17 +261,17 @@ router.put('/diseasepost/:id', upload.single('iconimg'), async (req, res) => {
 
     res.json({
       message: 'Disease updated successfully',
-      disease: updatedDisease
+      disease: formatDisease(updatedDisease)
     });
   } catch (error) {
-    if (req.file) {
-      fs.unlinkSync(req.file.path);
-    }
+    if (req.file) await deleteFromCloudinary(req.file.path);
     res.status(400).json({ message: error.message });
   }
 });
 
+// =============================================
 // DELETE single disease
+// =============================================
 router.delete('/diseasepost/:id', async (req, res) => {
   try {
     const disease = await Disease.findById(req.params.id);
@@ -263,12 +279,9 @@ router.delete('/diseasepost/:id', async (req, res) => {
       return res.status(404).json({ message: 'Disease not found' });
     }
 
-    // Delete associated image
+    // ✅ Cloudinary se image delete karo
     if (disease.iconimg) {
-      const imagePath = path.join('public/uploads/diseases/', disease.iconimg);
-      if (fs.existsSync(imagePath)) {
-        fs.unlinkSync(imagePath);
-      }
+      await deleteFromCloudinary(disease.iconimg);
     }
 
     await Disease.findByIdAndDelete(req.params.id);
@@ -278,38 +291,33 @@ router.delete('/diseasepost/:id', async (req, res) => {
   }
 });
 
+// =============================================
 // BULK DELETE diseases
+// =============================================
 router.delete('/diseasepost', async (req, res) => {
   try {
     const { ids } = req.body;
-    
+
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ message: 'No disease IDs provided' });
     }
 
     const diseases = await Disease.find({ _id: { $in: ids } });
-    
-    // Delete associated images
-    diseases.forEach(disease => {
-      if (disease.iconimg) {
-        const imagePath = path.join('public/uploads/diseases/', disease.iconimg);
-        if (fs.existsSync(imagePath)) {
-          fs.unlinkSync(imagePath);
-        }
-      }
-    });
+
+    // ✅ Cloudinary se sabki images delete karo
+    await Promise.all(diseases.map(d => deleteFromCloudinary(d.iconimg)));
 
     const result = await Disease.deleteMany({ _id: { $in: ids } });
-    
-    res.json({ 
-      message: `${result.deletedCount} disease(s) deleted successfully` 
-    });
+
+    res.json({ message: `${result.deletedCount} disease(s) deleted successfully` });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// TOGGLE disease status (Active/Inactive)
+// =============================================
+// TOGGLE status (Active/Inactive)
+// =============================================
 router.patch('/diseasepost/:id/toggle-status', async (req, res) => {
   try {
     const disease = await Disease.findById(req.params.id);
@@ -319,17 +327,19 @@ router.patch('/diseasepost/:id/toggle-status', async (req, res) => {
 
     disease.status = disease.status === 'Active' ? 'Inactive' : 'Active';
     const updatedDisease = await disease.save();
-    
+
     res.json({
       message: `Disease ${updatedDisease.status === 'Active' ? 'activated' : 'deactivated'} successfully`,
-      disease: updatedDisease
+      disease: formatDisease(updatedDisease)
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// TOGGLE active flag (isActive) - using the instance method
+// =============================================
+// TOGGLE isActive flag
+// =============================================
 router.patch('/diseasepost/:id/toggle-active', async (req, res) => {
   try {
     const disease = await Disease.findById(req.params.id);
@@ -338,32 +348,33 @@ router.patch('/diseasepost/:id/toggle-active', async (req, res) => {
     }
 
     const updatedDisease = await disease.toggleActive();
-    
+
     res.json({
       message: `Disease ${updatedDisease.isActive ? 'activated' : 'deactivated'} successfully`,
-      disease: updatedDisease
+      disease: formatDisease(updatedDisease)
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// BULK TOGGLE active status
+// =============================================
+// BULK TOGGLE isActive
+// =============================================
 router.patch('/diseasepost/bulk/toggle-active', async (req, res) => {
   try {
     const { ids, isActive } = req.body;
-    
+
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ message: 'No disease IDs provided' });
     }
-
     if (isActive === undefined) {
       return res.status(400).json({ message: 'isActive status is required' });
     }
 
     const result = await Disease.updateMany(
       { _id: { $in: ids } },
-      { $set: { isActive: isActive } }
+      { $set: { isActive } }
     );
 
     res.json({
@@ -374,45 +385,27 @@ router.patch('/diseasepost/bulk/toggle-active', async (req, res) => {
   }
 });
 
+// =============================================
 // BULK UPDATE status
+// =============================================
 router.patch('/diseasepost/bulk/update-status', async (req, res) => {
   try {
     const { ids, status } = req.body;
-    
+
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ message: 'No disease IDs provided' });
     }
-
     if (!status || !['Active', 'Inactive'].includes(status)) {
-      return res.status(400).json({ message: 'Valid status is required' });
+      return res.status(400).json({ message: 'Valid status is required (Active or Inactive)' });
     }
 
     const result = await Disease.updateMany(
       { _id: { $in: ids } },
-      { $set: { status: status } }
+      { $set: { status } }
     );
 
     res.json({
       message: `${result.modifiedCount} disease(s) status updated to ${status}`
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// GET disease statistics
-router.get('/diseasepost/stats/counts', async (req, res) => {
-  try {
-    const total = await Disease.countDocuments();
-    const active = await Disease.countDocuments({ isActive: true });
-    const inactive = await Disease.countDocuments({ isActive: false });
-    const showHome = await Disease.countDocuments({ showHome: true });
-    
-    res.json({
-      total,
-      active,
-      inactive,
-      showHome
     });
   } catch (error) {
     res.status(500).json({ message: error.message });

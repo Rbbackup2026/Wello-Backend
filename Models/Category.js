@@ -32,6 +32,10 @@ const categorySchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  showinNavbar: {
+    type: Boolean,
+    default: false,
+  },
   status: {
     type: Boolean,
     default: true,
@@ -40,6 +44,12 @@ const categorySchema = new mongoose.Schema({
     type: String,
     default: "",
   },
+  faqs: [
+  {
+    question: { type: String, trim: true },
+    answer: { type: String, trim: true }
+  }
+],
 }); 
 
 module.exports = mongoose.model("Category", categorySchema);

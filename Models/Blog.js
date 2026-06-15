@@ -9,6 +9,12 @@ const BlogSchema = new mongoose.Schema(
     category: { type: String },
     tags: { type: [String], default: [] },
     image: { type: String, default: null }, // url path e.g. /uploads/xxx.jpg
+    faqs: [
+      {
+        question: { type: String, trim: true },
+        answer: { type: String, trim: true },
+      },
+    ],
     metaTitle: { type: String, default: "" },
     metaDescription: { type: String, default: "" },
     sortOrder: { type: Number, default: 0 },

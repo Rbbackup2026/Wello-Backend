@@ -78,7 +78,7 @@ router.put("/banner/:id/image", upload.single("image"), async (req, res) => {
     if (!banner) return res.status(404).json({ message: "Not found" });
     if (!req.file) return res.status(400).json({ message: "Image required" });
 
-    banner.imgUrl = `/uploads/${req.file.filename}`;
+    banner.image = `/uploads/${req.file.filename}`;
     await banner.save();
     res.json(banner);
   } catch (err) {

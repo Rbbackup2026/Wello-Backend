@@ -90,7 +90,6 @@ const labSchema = new mongoose.Schema({
 });
 
 // Indexes for better performance
-labSchema.index({ labId: 1 }, { unique: true });
 labSchema.index({ city: 1, status: 1 });
 labSchema.index({ sortOrder: 1 });
 labSchema.index({ createdAt: -1 });

@@ -115,10 +115,15 @@ const path = require('path');
 const fs = require('fs');
 const Banner = require('../Models/HomeBanner'); 
 
+const uploadDir = path.join(__dirname, '..', 'uploads', 'Homebanners');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
 // Multer storage config
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, '/uploads/Homebanners');
+    cb(null, uploadDir);
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -162,7 +167,21 @@ router.post(
 // ✅ GET: All banners (optionally filter by active)
 router.get('/getall', async (req, res) => {
   try {
-    const banners = await Banner.find().sort({ createdAt: -1 });
+    const filter = {};
+
+    if (req.query.city) {
+      filter.city = new RegExp(`^${req.query.city.trim()}$`, 'i');
+    }
+
+    if (req.query.display) {
+      filter.display = req.query.display;
+    }
+
+    if (req.query.status) {
+      filter.status = req.query.status;
+    }
+
+    const banners = await Banner.find(filter).sort({ createdAt: -1 });
     res.status(200).json(banners);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch banners' });

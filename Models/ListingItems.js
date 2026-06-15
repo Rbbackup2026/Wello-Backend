@@ -17,7 +17,12 @@ const productSchema = new mongoose.Schema({
     default: 1,
     min: 1
   },
-
+  sku: {
+    type: String,
+    unique: true,
+    required: true,
+    trim: true
+  },
   category: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Category',
@@ -55,9 +60,9 @@ const productSchema = new mongoose.Schema({
     required: true
   },
   lab: {
-    type: String,
-    enum: ['lab1', 'lab2', 'lab3', ''],
-    default: ''
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Lab',
+    default: null
   },
 
   reportingTime: {
@@ -67,9 +72,9 @@ const productSchema = new mongoose.Schema({
     type: String
   },
   certificate: {
-    type: String,
-    enum: ['certificate1', 'certificate2', 'certificate3', ''],
-    default: ''
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Certificate',
+    default: null
   },
 
   fromAge: {
@@ -98,6 +103,12 @@ const productSchema = new mongoose.Schema({
     enum: ['Yes', 'No'],
     default: 'No'
   },
+  showFullBodyHealthCheckup: {
+    type: String,
+    enum: ['Yes', 'No'],
+    default: 'No'
+  },
+
   showInHome: {
     type: Boolean,
     default: false
@@ -106,6 +117,9 @@ const productSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  iconImg: {
+    type: String
+  },
 
   startDate: {
     type: Date
@@ -113,6 +127,19 @@ const productSchema = new mongoose.Schema({
   endDate: {
     type: Date
   },
+
+  description: {
+  type: String,
+  default: ""
+},
+
+faqs: [
+  {
+    question: { type: String, trim: true },
+    answer: { type: String, trim: true }
+  }
+],
+
 
   metaTitle: {
     type: String,

@@ -6,8 +6,8 @@ const fs = require("fs");
 const Blog = require("../Models/Blog");
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || "uploads";
-const BASE_URL = process.env.BASE_URL || "https://razobytehealthcare-website-backend-code.onrender.com/";
-
+const API_BASE_URL = (process.env.BASE_URL || "http://localhost:3000/v1/api/").replace(/\/$/, "");
+const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || API_BASE_URL.replace(/\/v1\/api$/i, "")).replace(/\/$/, "");
 // ensure upload dir exists
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
@@ -24,6 +24,24 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+const parseJsonArray = (value, fallback = []) => {
+  if (value === undefined) return fallback;
+  if (Array.isArray(value)) return value;
+  if (!String(value).trim()) return [];
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : fallback;
+  } catch (error) {
+    return fallback;
+  }
+};
+
+const getImageUrl = (image) => {
+  if (!image) return null;
+  if (/^https?:\/\//i.test(image)) return image;
+  return `${PUBLIC_BASE_URL}${image}`;
+};
 
 // ========== GET ALL BLOGS ==========
 router.get("/blogget", async (req, res) => {
@@ -31,7 +49,7 @@ router.get("/blogget", async (req, res) => {
     const blogs = await Blog.find().sort({ sortOrder: 1 });
     const result = blogs.map((b) => {
       const obj = b.toObject();
-      if (obj.image) obj.image = `${BASE_URL}${obj.image}`;
+      obj.image = getImageUrl(obj.image);
       return obj;
     });
 
@@ -51,7 +69,7 @@ router.get("/getblogid/:id", async (req, res) => {
     if (!blog) return res.status(404).json({ message: "Not found" });
 
     const obj = blog.toObject();
-    if (obj.image) obj.image = `${BASE_URL}${obj.image}`;
+    obj.image = getImageUrl(obj.image);
 
     res.json(obj);
   } catch (err) {
@@ -76,7 +94,8 @@ router.post("/blogpost", upload.single("image"), async (req, res) => {
       intro: payload.intro,
       description: payload.description,
       category: payload.category,
-      tags: JSON.parse(payload.tags || "[]"),
+      tags: parseJsonArray(payload.tags),
+      faqs: parseJsonArray(payload.faqs),
       image: imagePath,
       metaTitle: payload.metaTitle,
       metaDescription: payload.metaDescription,
@@ -115,7 +134,8 @@ router.put("/blogput/:id", upload.single("image"), async (req, res) => {
     blog.intro = payload.intro;
     blog.description = payload.description;
     blog.category = payload.category;
-    blog.tags = JSON.parse(payload.tags || "[]");
+    blog.tags = parseJsonArray(payload.tags);
+    blog.faqs = parseJsonArray(payload.faqs, blog.faqs);
     blog.metaTitle = payload.metaTitle;
     blog.metaDescription = payload.metaDescription;
     blog.sortOrder = payload.sortOrder;
@@ -205,7 +225,7 @@ router.put("/blogtoggle-home/:id", async (req, res) => {
 router.get("/blogget-active", async (req, res) => {
   try {
     const blogs = await Blog.find(
-      { status: "active" },              // only active
+      { status: "active" },             
       { name: 1, intro: 1, image: 1 }    // return only required fields
     ).sort({ sortOrder: 1 });
 
@@ -213,7 +233,7 @@ router.get("/blogget-active", async (req, res) => {
       _id: b._id,
       name: b.name,
       intro: b.intro,
-      image: b.image ? `${BASE_URL}${b.image}` : null,
+      image: getImageUrl(b.image),
     }));
 
     res.json(result);
