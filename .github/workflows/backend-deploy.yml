@@ -1,0 +1,47 @@
+name: Backend Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: backend-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy Backend
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          port: 22
+          timeout: 60s
+          command_timeout: 20m
+          script: |
+            set -e
+
+            echo "Starting backend deployment..."
+
+            cd /var/www/backend/Wello-Backend
+
+            git fetch origin
+            git reset --hard origin/main
+
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+
+            nvm use 20
+
+            npm install --no-audit --no-fund
+
+            pm2 restart backend --update-env
+
+            pm2 save
+
+            echo "Backend deployment completed successfully"
