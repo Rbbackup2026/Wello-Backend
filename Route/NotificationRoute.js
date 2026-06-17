@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const Notification = require("../models/Notification");
+const Notification = require("../Models/Notification");
 
 // Admin notification bhejta hai
 router.post("/send-user-notification", async (req, res) => {
